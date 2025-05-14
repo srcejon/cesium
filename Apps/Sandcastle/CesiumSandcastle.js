@@ -26,6 +26,7 @@ require({
       location: "../Apps/Sandcastle/ThirdParty",
     },
   ],
+  // @ts-expect-error
 }, [
   "CodeMirror/lib/codemirror",
   "dijit/Dialog",
@@ -47,7 +48,6 @@ require({
   "dojo/parser",
   "dojo/promise/all",
   "dojo/query",
-  "dojo/when",
   "dojo/request/script",
   "Sandcastle/LinkButton",
   "ThirdParty/clipboard.min",
@@ -92,11 +92,10 @@ require({
   parser,
   all,
   query,
-  when,
   dojoscript,
   LinkButton,
   ClipboardJS,
-  pako
+  pako,
 ) {
   "use strict";
   // attach clipboard handling to our Copy button
@@ -121,7 +120,7 @@ require({
   function appendConsole(className, message, showConsole) {
     const ele = document.createElement("span");
     ele.className = className;
-    ele.textContent = message + "\n";
+    ele.textContent = `${message}\n`;
     logOutput.appendChild(ele);
     logOutput.parentNode.scrollTop =
       logOutput.clientHeight + 8 - logOutput.parentNode.clientHeight;
@@ -131,7 +130,7 @@ require({
       ++numberOfNewConsoleMessages;
       registry
         .byId("logContainer")
-        .set("title", "Console (" + numberOfNewConsoleMessages + ")");
+        .set("title", `Console (${numberOfNewConsoleMessages})`);
     }
   }
 
@@ -236,7 +235,7 @@ require({
   function clearRun() {
     domClass.remove(
       registry.byId("buttonRun").domNode,
-      "highlightToolbarButton"
+      "highlightToolbarButton",
     );
   }
 
@@ -245,7 +244,7 @@ require({
       docTabs[title] = new ContentPane({
         title: title,
         focused: true,
-        content: '<iframe class="fullFrame" src="' + link + '"></iframe>',
+        content: `<iframe class="fullFrame" src="${link}"></iframe>`,
         closable: true,
         onClose: function () {
           docTabs[this.title] = undefined;
@@ -294,12 +293,12 @@ require({
           .replace("module-", "")
           .replace("#.", ".")
           .replace("#", ".");
-        ele.href = "../../Build/Documentation/" + member;
+        ele.href = `../../Build/Documentation/${member}`;
         ele.onclick = onDocClick;
         docMessage.appendChild(ele);
       }
       jsEditor.addWidget(jsEditor.getCursor(true), docNode);
-      docNode.style.top = parseInt(docNode.style.top, 10) - 5 + "px";
+      docNode.style.top = `${parseInt(docNode.style.top, 10) - 5}px`;
     }
   }
 
@@ -338,9 +337,9 @@ require({
   function openGalleryTooltip() {
     galleryTooltipTimer = undefined;
 
-    const selectedTabName = registry.byId("innerPanel").selectedChildWidget
-      .title;
-    let suffix = selectedTabName + "Demos";
+    const selectedTabName =
+      registry.byId("innerPanel").selectedChildWidget.title;
+    let suffix = `${selectedTabName}Demos`;
     if (selectedTabName === "All") {
       suffix = "all";
     } else if (selectedTabName === "Search Results") {
@@ -397,7 +396,7 @@ require({
           line = jsEditor.setGutterMarker(
             i,
             "searchGutter",
-            makeLineLabel("Search: " + searchTerm, "searchMarker")
+            makeLineLabel(`Search: ${searchTerm}`, "searchMarker"),
           );
           jsEditor.addLineClass(line, "text", "searchLine");
           errorLines.push(line);
@@ -417,7 +416,7 @@ require({
           line = jsEditor.setGutterMarker(
             scriptLineToEditorLine(hint.line),
             "hintGutter",
-            makeLineLabel(hint.reason, "hintMarker")
+            makeLineLabel(hint.reason, "hintMarker"),
           );
           jsEditor.addLineClass(line, "text", "hintLine");
           errorLines.push(line);
@@ -455,7 +454,7 @@ require({
         {
           line: lineNumber - 1,
           ch: 0,
-        }
+        },
       );
       jsEditor.focus();
       jsEditor.setSelection(
@@ -466,7 +465,7 @@ require({
         {
           line: lineNumber,
           ch: 0,
-        }
+        },
       );
     }
   }
@@ -483,7 +482,7 @@ require({
       line = jsEditor.setGutterMarker(
         lineNum,
         "highlightGutter",
-        makeLineLabel("highlighted by demo", "highlightMarker")
+        makeLineLabel("highlighted by demo", "highlightMarker"),
       );
       jsEditor.addLineClass(line, "text", "highlightLine");
       highlightLines.push(line);
@@ -518,7 +517,7 @@ require({
             demoContainer.scrollLeft -= (e.wheelDelta * 70) / 120;
           }
         },
-        false
+        false,
       );
     } else {
       demoContainer.addEventListener(
@@ -528,7 +527,7 @@ require({
             demoContainer.scrollLeft += (e.detail * 70) / 3;
           }
         },
-        false
+        false,
       );
     }
   }
@@ -574,7 +573,7 @@ require({
         Tab: "indentMore",
         "Shift-Tab": "indentLess",
       },
-    }
+    },
   );
 
   window.onbeforeunload = function (e) {
@@ -624,11 +623,11 @@ require({
 
     const onScriptTagError = function () {
       if (bucketFrame.contentDocument === bucketDoc) {
-        appendConsole("consoleError", "Error loading " + this.src, true);
+        appendConsole("consoleError", `Error loading ${this.src}`, true);
         appendConsole(
           "consoleError",
           "Make sure Cesium is built, see the Contributor's Guide for details.",
-          true
+          true,
         );
       }
     };
@@ -675,7 +674,7 @@ require({
 
         element.textContent = embedInSandcastleTemplate(
           jsEditor.getValue(),
-          isFirefox
+          isFirefox,
         );
         bucketDoc.body.appendChild(element);
       }
@@ -698,10 +697,8 @@ require({
       ) {
         appendConsole(
           "consoleError",
-          "Error, first part of " +
-            local.bucketName +
-            " must match first part of bucket.html exactly.",
-          true
+          `Error, first part of ${local.bucketName} must match first part of bucket.html exactly.`,
+          true,
         );
       } else {
         const bodyAttributes = local.headers.match(/<body([^>]*?)>/)[1];
@@ -723,7 +720,7 @@ require({
         const pos = local.headers.indexOf("</head>");
         const extraHeaders = local.headers.substring(
           local.emptyBucket.length,
-          pos
+          pos,
         );
         bucketDoc.head.innerHTML += extraHeaders;
         activateBucketScripts(bucketDoc);
@@ -760,7 +757,7 @@ require({
           '<html><head></head><body data-sandcastle-bucket-loaded="no">';
         xhr
           .get({
-            url: "templates/" + bucketName,
+            url: `templates/${bucketName}`,
             handleAs: "text",
           })
           .then(function (value) {
@@ -781,7 +778,7 @@ require({
     queryObject = ioQuery.queryToObject(window.location.search.substring(1));
   }
   if (!defined(queryObject.src)) {
-    queryObject.src = defaultDemo + ".html";
+    queryObject.src = `${defaultDemo}.html`;
   }
   if (!defined(queryObject.label)) {
     queryObject.label = defaultLabel;
@@ -789,7 +786,7 @@ require({
 
   function loadFromGallery(demo) {
     deferredLoadError = false;
-    document.getElementById("saveAsFile").download = demo.name + ".html";
+    document.getElementById("saveAsFile").download = `${demo.name}.html`;
     registry
       .byId("description")
       .set("value", decodeHTML(demo.description).replace(/\\n/g, "\n"));
@@ -818,7 +815,7 @@ require({
       let json, code, html;
       if (defined(queryObject.gist)) {
         dojoscript
-          .get("https://api.github.com/gists/" + queryObject.gist, {
+          .get(`https://api.github.com/gists/${queryObject.gist}`, {
             jsonp: "callback",
           })
           .then(function (data) {
@@ -831,9 +828,8 @@ require({
           .otherwise(function (error) {
             appendConsole(
               "consoleError",
-              "Unable to GET gist from GitHub API. This could be due to too many requests from your IP. Try again in an hour or copy and paste the code from the gist: https://gist.github.com/" +
-                queryObject.gist,
-              true
+              `Unable to GET gist from GitHub API. This could be due to too many requests from your IP. Try again in an hour or copy and paste the code from the gist: https://gist.github.com/${queryObject.gist}`,
+              true,
             );
             console.log(error);
           });
@@ -856,13 +852,13 @@ require({
         const doc = parser.parseFromString(demo.code, "text/html");
 
         const script = doc.querySelector(
-          'script[id="cesium_sandcastle_script"]'
+          'script[id="cesium_sandcastle_script"]',
         );
         if (!script) {
           appendConsole(
             "consoleError",
-            "Error reading source file: " + demo.name,
-            true
+            `Error reading source file: ${demo.name}`,
+            true,
           );
           return;
         }
@@ -871,8 +867,8 @@ require({
         if (!scriptMatch) {
           appendConsole(
             "consoleError",
-            "Error reading source file: " + demo.name,
-            true
+            `Error reading source file: ${demo.name}`,
+            true,
           );
           return;
         }
@@ -905,10 +901,10 @@ require({
     function (e) {
       if (e.state && e.state.name && e.state.code) {
         loadFromGallery(e.state);
-        document.title = e.state.name + " - Cesium Sandcastle";
+        document.title = `${e.state.name} - Cesium Sandcastle`;
       }
     },
-    false
+    false,
   );
 
   window.addEventListener(
@@ -934,8 +930,8 @@ require({
           if (docError) {
             appendConsole(
               "consoleError",
-              'Documentation not available.  Please run the "generateDocumentation" build script to generate Cesium documentation.',
-              true
+              'Documentation not available.  Please run the "build-docs" build script to generate Cesium documentation.',
+              true,
             );
             showGallery();
           }
@@ -943,16 +939,17 @@ require({
             appendConsole(
               "consoleError",
               "Error loading gallery, please run the build script.",
-              true
+              true,
             );
           }
           if (deferredLoadError) {
             appendConsole(
               "consoleLog",
-              "Unable to load demo named " +
-                queryObject.src.replace(".html", "") +
-                ". Redirecting to HelloWorld.\n",
-              true
+              `Unable to load demo named ${queryObject.src.replace(
+                ".html",
+                "",
+              )}. Redirecting to HelloWorld.\n`,
+              true,
             );
           }
         }
@@ -967,14 +964,14 @@ require({
           errorMsg += " (on line ";
 
           if (e.data.url) {
-            errorMsg += lineNumber + " of " + e.data.url + ")";
+            errorMsg += `${lineNumber} of ${e.data.url})`;
           } else {
             lineNumber = scriptLineToEditorLine(lineNumber);
-            errorMsg += lineNumber + 1 + ")";
+            errorMsg += `${lineNumber + 1})`;
             line = jsEditor.setGutterMarker(
               lineNumber,
               "errorGutter",
-              makeLineLabel(e.data.error, "errorMarker")
+              makeLineLabel(e.data.error, "errorMarker"),
             );
             jsEditor.addLineClass(line, "text", "errorLine");
             errorLines.push(line);
@@ -990,7 +987,7 @@ require({
         highlightLine(e.data.highlight);
       }
     },
-    true
+    true,
   );
 
   registry.byId("jsContainer").on("show", function () {
@@ -1015,11 +1012,11 @@ require({
         const demo = gallery_demos[i];
         const demoName = demo.name;
         if (searchRegExp.test(demoName) || searchRegExp.test(demo.code)) {
-          document.getElementById(demoName + "searchDemo").style.display =
+          document.getElementById(`${demoName}searchDemo`).style.display =
             "inline-block";
           ++numDemosShown;
         } else {
-          document.getElementById(demoName + "searchDemo").style.display =
+          document.getElementById(`${demoName}searchDemo`).style.display =
             "none";
         }
       }
@@ -1055,7 +1052,7 @@ require({
 
   function getBaseUrl() {
     // omits query string and hash
-    return location.protocol + "//" + location.host + location.pathname;
+    return `${location.protocol}//${location.host}${location.pathname}`;
   }
 
   function makeCompressedBase64String(data) {
@@ -1065,7 +1062,7 @@ require({
     // we save a few bytes by omitting the leading [" and trailing "] since they are always the same
     jsonString = jsonString.substr(2, jsonString.length - 4);
     let base64String = btoa(
-      pako.deflate(jsonString, { raw: true, to: "string", level: 9 })
+      pako.deflate(jsonString, { raw: true, to: "string", level: 9 }),
     );
     base64String = base64String.replace(/\=+$/, ""); // remove padding
 
@@ -1079,7 +1076,7 @@ require({
     const base64String = makeCompressedBase64String([code, html]);
 
     const shareUrlBox = document.getElementById("shareUrl");
-    shareUrlBox.value = getBaseUrl() + "#c=" + base64String;
+    shareUrlBox.value = `${getBaseUrl()}#c=${base64String}`;
     shareUrlBox.select();
   });
 
@@ -1090,19 +1087,19 @@ require({
     if (gistIndex !== -1) {
       gistId = gistId.substring(gistIndex + gistParameter.length);
     }
-    window.location.href = getBaseUrl() + "?gist=" + gistId;
+    window.location.href = `${getBaseUrl()}?gist=${gistId}`;
   });
 
   function getPushStateUrl(demo) {
     const obj = {};
     if (demo.name !== defaultDemo) {
-      obj.src = demo.name + ".html";
+      obj.src = `${demo.name}.html`;
     }
     if (currentTab !== defaultLabel) {
       obj.label = currentTab;
     }
     const query = ioQuery.objectToQuery(obj);
-    return query === "" ? query : "?" + query;
+    return query === "" ? query : `?${query}`;
   }
 
   registry.byId("buttonNew").on("click", function () {
@@ -1111,13 +1108,13 @@ require({
     let confirmChange = true;
     if (demoHtml !== htmlText || demoCode !== jsText) {
       confirmChange = window.confirm(
-        "You have unsaved changes. Are you sure you want to navigate away from this demo?"
+        "You have unsaved changes. Are you sure you want to navigate away from this demo?",
       );
     }
     if (confirmChange) {
       window.history.pushState(newDemo, newDemo.name, getPushStateUrl(newDemo));
       loadFromGallery(newDemo).then(function () {
-        document.title = newDemo.name + " - Cesium Sandcastle";
+        document.title = `${newDemo.name} - Cesium Sandcastle`;
       });
     }
   });
@@ -1132,14 +1129,14 @@ require({
 
   function getDemoHtml() {
     return (
-      local.headers +
-      "\n" +
-      htmlEditor.getValue() +
-      '<script id="cesium_sandcastle_script">\n' +
-      embedInSandcastleTemplate(jsEditor.getValue(), false) +
-      "</script>\n" +
-      "</body>\n" +
-      "</html>\n"
+      `${
+        local.headers
+      }\n${htmlEditor.getValue()}<script id="cesium_sandcastle_script">\n${embedInSandcastleTemplate(
+        jsEditor.getValue(),
+        false,
+      )}</script>\n` +
+      `</body>\n` +
+      `</html>\n`
     );
   }
 
@@ -1147,22 +1144,20 @@ require({
     let currentDemoName = queryObject.src;
     currentDemoName = currentDemoName.replace(".html", "");
     const description = encodeHTML(
-      registry.byId("description").get("value").replace(/\n/g, "\\n")
+      registry.byId("description").get("value").replace(/\n/g, "\\n"),
     ).replace(/\"/g, "&quot;");
     const label = encodeHTML(
-      registry.byId("label").get("value").replace(/\n/g, "\\n")
+      registry.byId("label").get("value").replace(/\n/g, "\\n"),
     ).replace(/\"/g, "&quot;");
 
     let html = getDemoHtml();
     html = html.replace(
       "<title>",
-      '<meta name="description" content="' + description + '">\n    <title>'
+      `<meta name="description" content="${description}">\n    <title>`,
     );
     html = html.replace(
       "<title>",
-      '<meta name="cesium-sandcastle-labels" content="' +
-        label +
-        '">\n    <title>'
+      `<meta name="cesium-sandcastle-labels" content="${label}">\n    <title>`,
     );
 
     const octetBlob = new Blob([html], {
@@ -1178,14 +1173,14 @@ require({
     //the demo's HTML to add a base href.
     let baseHref = getBaseUrl();
     const pos = baseHref.lastIndexOf("/");
-    baseHref = baseHref.substring(0, pos) + "/gallery/";
+    baseHref = `${baseHref.substring(0, pos)}/gallery/`;
 
     const code = jsEditor.getValue();
     const html = htmlEditor.getValue();
     const data = makeCompressedBase64String([code, html, baseHref]);
 
     let url = getBaseUrl();
-    url = url.replace("index.html", "") + "standalone.html" + "#c=" + data;
+    url = `${url.replace("index.html", "")}standalone.html` + `#c=${data}`;
 
     window.open(url, "_blank");
     window.focus();
@@ -1213,14 +1208,14 @@ require({
       demoTileHeightRule.style.display = "none";
     } else {
       demoTileHeightRule.style.display = "inline";
-      demoTileHeightRule.style.height = Math.min(newSize, 150) + "px";
+      demoTileHeightRule.style.height = `${Math.min(newSize, 150)}px`;
     }
     this.originalResize(changeSize, resultSize);
   };
 
   function requestDemo(name) {
     return xhr.get({
-      url: "gallery/" + name + ".html",
+      url: `gallery/${name}.html`,
       handleAs: "text",
       error: function (error) {
         loadFromGallery(gallery_demos[hello_world_index]).then(function () {
@@ -1230,7 +1225,7 @@ require({
     });
   }
 
-  const newInLabel = "New in " + VERSION;
+  const newInLabel = `New in ${VERSION}`;
   function loadDemoFromFile(demo) {
     return requestDemo(demo.name).then(function (value) {
       // Store the file contents for later searching.
@@ -1248,11 +1243,11 @@ require({
       demo.description = description ? description : "";
 
       const labelsMeta = doc.querySelector(
-        'meta[name="cesium-sandcastle-labels"]'
+        'meta[name="cesium-sandcastle-labels"]',
       );
       const labels = labelsMeta && labelsMeta.getAttribute("content");
       if (demo.isNew) {
-        demo.label = labels ? labels + "," + newInLabel : newInLabel;
+        demo.label = labels ? `${labels},${newInLabel}` : newInLabel;
       } else {
         demo.label = labels ? labels : "";
       }
@@ -1265,7 +1260,7 @@ require({
             if (defined(queryObject.gist)) {
               document.title = "Gist Import - Cesium Sandcastle";
             } else {
-              document.title = demo.name + " - Cesium Sandcastle";
+              document.title = `${demo.name} - Cesium Sandcastle`;
             }
           });
         }
@@ -1273,7 +1268,7 @@ require({
 
       // Create a tooltip containing the demo's description.
       demoTooltips[demo.name] = new TooltipDialog({
-        id: demo.name + "TooltipDialog",
+        id: `${demo.name}TooltipDialog`,
         style: "width: 200px; font-size: 12px;",
         content: demo.description.replace(/\\n/g, "<br/>"),
       });
@@ -1323,21 +1318,16 @@ require({
       for (let j = 0; j < labels.length; j++) {
         let label = labels[j];
         label = label.trim();
-        if (!dom.byId(label + "Demos")) {
+        if (!dom.byId(`${label}Demos`)) {
           const cp = new ContentPane({
-            content:
-              '<div id="' +
-              label +
-              'Container" class="demosContainer"><div class="demos" id="' +
-              label +
-              'Demos"></div></div>',
+            content: `<div id="${label}Container" class="demosContainer"><div class="demos" id="${label}Demos"></div></div>`,
             title: label,
             onShow: onShowCallback(),
           }).placeAt("innerPanel");
           subtabs[label] = cp;
-          registerScroll(dom.byId(label + "Container"));
+          registerScroll(dom.byId(`${label}Container`));
         }
-        const tabName = label + "Demos";
+        const tabName = `${label}Demos`;
         const tab = dom.byId(tabName);
         insertSortedById(tab, createGalleryButton(demo, tabName));
       }
@@ -1347,27 +1337,27 @@ require({
   function createGalleryButton(demo, tabName) {
     let imgSrc = "templates/Gallery_tile.jpg";
     if (defined(demo.img)) {
-      imgSrc = "gallery/" + demo.img;
+      imgSrc = `gallery/${demo.img}`;
     }
 
     const demoLink = document.createElement("a");
     demoLink.id = demo.name + tabName;
     demoLink.className = "linkButton";
-    demoLink.href = "gallery/" + encodeURIComponent(demo.name) + ".html";
+    demoLink.href = `gallery/${encodeURIComponent(demo.name)}.html`;
 
     if (demo.name === "Hello World") {
       newDemo = demo;
     }
     demoLink.onclick = function (e) {
       if (mouse.isMiddle(e)) {
-        window.open("gallery/" + demo.name + ".html");
+        window.open(`gallery/${demo.name}.html`);
       } else {
         const htmlText = htmlEditor.getValue().replace(/\s/g, "");
         const jsText = jsEditor.getValue().replace(/\s/g, "");
         let confirmChange = true;
         if (demoHtml !== htmlText || demoCode !== jsText) {
           confirmChange = window.confirm(
-            "You have unsaved changes. Are you sure you want to navigate away from this demo?"
+            "You have unsaved changes. Are you sure you want to navigate away from this demo?",
           );
         }
         if (confirmChange) {
@@ -1376,7 +1366,7 @@ require({
 
           window.history.pushState(demo, demo.name, getPushStateUrl(demo));
           loadFromGallery(demo).then(function () {
-            document.title = demo.name + " - Cesium Sandcastle";
+            document.title = `${demo.name} - Cesium Sandcastle`;
           });
         }
       }
@@ -1385,12 +1375,8 @@ require({
 
     new LinkButton({
       label:
-        '<div class="demoTileTitle">' +
-        demo.name +
-        "</div>" +
-        '<img src="' +
-        imgSrc +
-        '" class="demoTileThumbnail" alt="" onDragStart="return false;" />',
+        `<div class="demoTileTitle">${demo.name}</div>` +
+        `<img src="${imgSrc}" class="demoTileThumbnail" alt="" onDragStart="return false;" />`,
     }).placeAt(demoLink);
 
     on(demoLink, "mouseover", function () {
@@ -1423,20 +1409,15 @@ require({
     registerScroll(dom.byId("showcasesContainer"));
 
     if (has_new_gallery_demos) {
-      const name = "New in " + VERSION;
+      const name = `New in ${VERSION}`;
       subtabs[name] = new ContentPane({
-        content:
-          '<div id="' +
-          name +
-          'Container" class="demosContainer"><div class="demos" id="' +
-          name +
-          'Demos"></div></div>',
+        content: `<div id="${name}Container" class="demosContainer"><div class="demos" id="${name}Demos"></div></div>`,
         title: name,
         onShow: function () {
           setSubtab(this.title);
         },
       }).placeAt("innerPanel");
-      registerScroll(dom.byId(name + "Container"));
+      registerScroll(dom.byId(`${name}Container`));
     }
 
     let i;
@@ -1488,7 +1469,7 @@ require({
     });
   }
 
-  when(promise).then(function () {
+  Promise.resolve(promise).then(function () {
     dom.byId("searchDemos").appendChild(galleryErrorMsg);
     searchContainer = registry.byId("searchContainer");
 

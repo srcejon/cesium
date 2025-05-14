@@ -22,7 +22,7 @@
       {
         log: print(d1),
       },
-      "*"
+      "*",
     );
   };
 
@@ -33,7 +33,7 @@
       {
         warn: defined(d1) ? d1.toString() : "undefined",
       },
-      "*"
+      "*",
     );
   };
 
@@ -45,7 +45,7 @@
         {
           error: "undefined",
         },
-        "*"
+        "*",
       );
       return;
     }
@@ -75,7 +75,7 @@
             try {
               lineNumber = parseInt(
                 stack.substring(lineStart + 1, lineEnd1),
-                10
+                10,
               );
             } catch (ex) {}
             /*eslint-enable no-empty*/
@@ -90,14 +90,14 @@
           error: errorMsg,
           lineNumber: lineNumber,
         },
-        "*"
+        "*",
       );
     } else {
       window.parent.postMessage(
         {
           error: errorMsg,
         },
-        "*"
+        "*",
       );
     }
   };
@@ -112,7 +112,7 @@
         // Change lineNumber to the local one for highlighting.
         /*eslint-disable no-empty*/
         try {
-          let pos = errorMsg.indexOf(Sandcastle.bucket + ":");
+          let pos = errorMsg.indexOf(`${Sandcastle.bucket}:`);
           if (pos < 0) {
             pos = errorMsg.indexOf("<anonymous>");
           }
@@ -129,7 +129,7 @@
           url: url,
           lineNumber: lineNumber,
         },
-        "*"
+        "*",
       );
     } else {
       window.parent.postMessage(
@@ -137,7 +137,7 @@
           error: errorMsg,
           url: url,
         },
-        "*"
+        "*",
       );
     }
     console.originalError.apply(console, [errorMsg]);
@@ -154,7 +154,7 @@
       } catch (ex) {
         stack = ex.stack.toString();
       }
-      let needle = Sandcastle.bucket + ":"; // Firefox
+      let needle = `${Sandcastle.bucket}:`; // Firefox
       let pos = stack.indexOf(needle);
       if (pos < 0) {
         needle = " (<anonymous>:"; // Chrome
@@ -187,7 +187,7 @@
             {
               highlight: Sandcastle.registered[i].lineNumber,
             },
-            "*"
+            "*",
           );
           return;
         }
@@ -197,7 +197,7 @@
       {
         highlight: 0,
       },
-      "*"
+      "*",
     );
   };
 })();

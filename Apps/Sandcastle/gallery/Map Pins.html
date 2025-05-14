@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -18,10 +18,7 @@
     ></script>
     <script type="module" src="../load-cesium-es6.js"></script>
   </head>
-  <body
-    class="sandcastle-loading"
-    data-sandcastle-bucket="bucket-requirejs.html"
-  >
+  <body class="sandcastle-loading" data-sandcastle-bucket="bucket-requirejs.html">
     <style>
       @import url(../templates/bucket.css);
     </style>
@@ -29,7 +26,7 @@
     <div id="loadingOverlay"><h1>Loading...</h1></div>
     <div id="toolbar"></div>
     <script id="cesium_sandcastle_script">
-      function startup(Cesium) {
+      window.startup = async function (Cesium) {
         "use strict";
         //Sandcastle_Begin
         const viewer = new Cesium.Viewer("cesiumContainer", {
@@ -58,49 +55,49 @@
         });
 
         const url = Cesium.buildModuleUrl("Assets/Textures/maki/grocery.png");
-        const groceryPin = Cesium.when(
+        const groceryPin = Promise.resolve(
           pinBuilder.fromUrl(url, Cesium.Color.GREEN, 48),
-          function (canvas) {
-            return viewer.entities.add({
-              name: "Grocery store",
-              position: Cesium.Cartesian3.fromDegrees(-75.1705217, 39.921786),
-              billboard: {
-                image: canvas.toDataURL(),
-                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-              },
-            });
-          }
-        );
+        ).then(function (canvas) {
+          return viewer.entities.add({
+            name: "Grocery store",
+            position: Cesium.Cartesian3.fromDegrees(-75.1705217, 39.921786),
+            billboard: {
+              image: canvas.toDataURL(),
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            },
+          });
+        });
 
         //Create a red pin representing a hospital from the maki icon set.
-        const hospitalPin = Cesium.when(
+        const hospitalPin = Promise.resolve(
           pinBuilder.fromMakiIconId("hospital", Cesium.Color.RED, 48),
-          function (canvas) {
-            return viewer.entities.add({
-              name: "Hospital",
-              position: Cesium.Cartesian3.fromDegrees(-75.1698606, 39.9211275),
-              billboard: {
-                image: canvas.toDataURL(),
-                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-              },
-            });
-          }
-        );
+        ).then(function (canvas) {
+          return viewer.entities.add({
+            name: "Hospital",
+            position: Cesium.Cartesian3.fromDegrees(-75.1698606, 39.9211275),
+            billboard: {
+              image: canvas.toDataURL(),
+              verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+            },
+          });
+        });
 
         //Since some of the pins are created asynchronously, wait for them all to load before zooming/
-        Cesium.when.all(
-          [bluePin, questionPin, groceryPin, hospitalPin],
+        Promise.all([bluePin, questionPin, groceryPin, hospitalPin]).then(
           function (pins) {
             viewer.zoomTo(pins);
-          }
+          },
         );
 
         //Sandcastle_End
-        Sandcastle.finishedLoading();
-      }
+      };
       if (typeof Cesium !== "undefined") {
         window.startupCalled = true;
-        startup(Cesium);
+        window.startup(Cesium).catch((error) => {
+          "use strict";
+          console.error(error);
+        });
+        Sandcastle.finishedLoading();
       }
     </script>
   </body>

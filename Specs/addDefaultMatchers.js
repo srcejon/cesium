@@ -1,42 +1,105 @@
+import {
+  Cartesian2,
+  defaultValue,
+  defined,
+  DeveloperError,
+  FeatureDetection,
+  PrimitiveType,
+  Buffer,
+  BufferUsage,
+  ClearCommand,
+  DrawCommand,
+  ShaderProgram,
+  VertexArray,
+  Math as CesiumMath,
+} from "@cesium/engine";
 import equals from "./equals.js";
-import { Cartesian2 } from "../Source/Cesium.js";
-import { defaultValue } from "../Source/Cesium.js";
-import { defined } from "../Source/Cesium.js";
-import { DeveloperError } from "../Source/Cesium.js";
-import { FeatureDetection } from "../Source/Cesium.js";
-import { Math as CesiumMath } from "../Source/Cesium.js";
-import { PrimitiveType } from "../Source/Cesium.js";
-import { RuntimeError } from "../Source/Cesium.js";
-import { Buffer } from "../Source/Cesium.js";
-import { BufferUsage } from "../Source/Cesium.js";
-import { ClearCommand } from "../Source/Cesium.js";
-import { DrawCommand } from "../Source/Cesium.js";
-import { ShaderProgram } from "../Source/Cesium.js";
-import { VertexArray } from "../Source/Cesium.js";
 
 function createMissingFunctionMessageFunction(
   item,
   actualPrototype,
-  expectedInterfacePrototype
+  expectedInterfacePrototype,
 ) {
   return function () {
-    return (
-      "Expected function '" +
-      item +
-      "' to exist on " +
-      actualPrototype.constructor.name +
-      " because it should implement interface " +
-      expectedInterfacePrototype.constructor.name +
-      "."
-    );
+    return `Expected function '${item}' to exist on ${actualPrototype.constructor.name} because it should implement interface ${expectedInterfacePrototype.constructor.name}.`;
+  };
+}
+
+function makeAsyncThrowFunction(debug, Type, name) {
+  if (debug) {
+    return function (util) {
+      return {
+        compare: function (actualPromise, message) {
+          // based on the built-in Jasmine toBeRejectedWithError async-matcher
+          if (!defined(actualPromise) || !defined(actualPromise.then)) {
+            throw new Error("Expected function to be called on a promise.");
+          }
+
+          return actualPromise
+            .then(() => {
+              return {
+                pass: false,
+                message:
+                  "Expected a promise to be rejected but it was resolved.",
+              };
+            })
+            .catch((e) => {
+              let result = e instanceof Type || e.name === name;
+              if (defined(message)) {
+                if (typeof message === "string") {
+                  result = result && e.message === message;
+                } else {
+                  // if the expected message is a regular expression check it against the error message
+                  // this matches how the builtin .toRejectWithError(Error, /message/) works
+                  // https://github.com/jasmine/jasmine/blob/main/src/core/matchers/toThrowError.js
+                  result = result && message.test(e.message);
+                }
+              }
+              return {
+                pass: result,
+                message: result
+                  ? `Expected a promise to be rejected with ${name}.`
+                  : `Expected a promise to be rejected with ${
+                      defined(message) ? `${name}: ${message}` : name
+                    }, but it was rejected with ${e}`,
+              };
+            });
+        },
+      };
+    };
+  }
+
+  return function () {
+    return {
+      compare: function (actualPromise) {
+        return Promise.resolve(actualPromise)
+          .then(() => {
+            return { pass: true };
+          })
+          .catch((e) => {
+            // Ignore any error
+            return { pass: true };
+          });
+      },
+      negativeCompare: function (actualPromise) {
+        return Promise.resolve(actualPromise)
+          .then(() => {
+            return { pass: true };
+          })
+          .catch((e) => {
+            // Ignore any error
+            return { pass: true };
+          });
+      },
+    };
   };
 }
 
 function makeThrowFunction(debug, Type, name) {
   if (debug) {
-    return function (util, customEqualityTesters) {
+    return function (util) {
       return {
-        compare: function (actual, expected) {
+        compare: function (actual, message) {
           // based on the built-in Jasmine toThrow matcher
           let result = false;
           let exception;
@@ -52,22 +115,31 @@ function makeThrowFunction(debug, Type, name) {
           }
 
           if (exception) {
-            result = exception instanceof Type;
+            result = exception instanceof Type || exception.name === name;
+          }
+          if (defined(message)) {
+            if (typeof message === "string") {
+              result = result && exception.message === message;
+            } else {
+              // if the expected message is a regular expression check it against the error message
+              // this matches how the builtin .toRejectWithError(Error, /message/) works
+              // https://github.com/jasmine/jasmine/blob/main/src/core/matchers/toThrowError.js
+              result = result && message.test(exception.message);
+            }
           }
 
-          let message;
+          let testMessage;
           if (result) {
-            message = [
-              "Expected function not to throw " + name + " , but it threw",
-              exception.message || exception,
-            ].join(" ");
+            testMessage = `Expected function not to throw ${name} , but it threw ${exception.message || exception}`;
           } else {
-            message = "Expected function to throw " + name + ".";
+            testMessage = defined(message)
+              ? `Expected to throw with ${name}: ${message}, but it was thrown with ${exception}`
+              : `Expected function to throw with ${name}.`;
           }
 
           return {
             pass: result,
-            message: message,
+            message: testMessage,
           };
         },
       };
@@ -88,23 +160,7 @@ function makeThrowFunction(debug, Type, name) {
 
 function createDefaultMatchers(debug) {
   return {
-    toBeGreaterThanOrEqualTo: function (util, customEqualityTesters) {
-      return {
-        compare: function (actual, expected) {
-          return { pass: actual >= expected };
-        },
-      };
-    },
-
-    toBeLessThanOrEqualTo: function (util, customEqualityTesters) {
-      return {
-        compare: function (actual, expected) {
-          return { pass: actual <= expected };
-        },
-      };
-    },
-
-    toBeBetween: function (util, customEqualityTesters) {
+    toBeBetween: function (util) {
       return {
         compare: function (actual, lower, upper) {
           if (lower > upper) {
@@ -117,7 +173,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toStartWith: function (util, customEqualityTesters) {
+    toStartWith: function (util) {
       return {
         compare: function (actual, expected) {
           return { pass: actual.slice(0, expected.length) === expected };
@@ -125,7 +181,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toEndWith: function (util, customEqualityTesters) {
+    toEndWith: function (util) {
       return {
         compare: function (actual, expected) {
           return { pass: actual.slice(-expected.length) === expected };
@@ -133,20 +189,22 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toEqual: function (util, customEqualityTesters) {
+    toEqual: function (util) {
       return {
         compare: function (actual, expected) {
           return {
-            pass: equals(util, customEqualityTesters, actual, expected),
+            pass: equals(util, actual, expected),
           };
         },
       };
     },
 
-    toEqualEpsilon: function (util, customEqualityTesters) {
+    toEqualEpsilon: function (util) {
       return {
         compare: function (actual, expected, epsilon) {
           function equalityTester(a, b) {
+            a = typedArrayToArray(a);
+            b = typedArrayToArray(b);
             if (Array.isArray(a) && Array.isArray(b)) {
               if (a.length !== b.length) {
                 return false;
@@ -190,17 +248,31 @@ function createDefaultMatchers(debug) {
               return Math.abs(a - b) <= epsilon;
             }
 
-            return undefined;
+            if (defined(a) && defined(b)) {
+              const keys = Object.keys(a);
+              for (let i = 0; i < keys.length; i++) {
+                if (!b.hasOwnProperty(keys[i])) {
+                  return false;
+                }
+                const aVal = a[keys[i]];
+                const bVal = b[keys[i]];
+                if (!equalityTester(aVal, bVal)) {
+                  return false;
+                }
+              }
+              return true;
+            }
+
+            return equals(util, a, b);
           }
 
-          const result = equals(util, [equalityTester], actual, expected);
-
+          const result = equalityTester(actual, expected);
           return { pass: result };
         },
       };
     },
 
-    toConformToInterface: function (util, customEqualityTesters) {
+    toConformToInterface: function (util) {
       return {
         compare: function (actual, expectedInterface) {
           // All function properties on the prototype should also exist on the actual's prototype.
@@ -218,7 +290,7 @@ function createDefaultMatchers(debug) {
                 message: createMissingFunctionMessageFunction(
                   item,
                   actualPrototype,
-                  expectedInterfacePrototype
+                  expectedInterfacePrototype,
                 ),
               };
             }
@@ -229,67 +301,23 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toBeInstanceOf: function (util, customEqualityTesters) {
-      return {
-        compare: function (actual, expectedConstructor) {
-          const result = {};
-          if (expectedConstructor === String) {
-            result.pass =
-              typeof actual === "string" || actual instanceof String;
-          } else if (expectedConstructor === Number) {
-            result.pass =
-              typeof actual === "number" || actual instanceof Number;
-          } else if (expectedConstructor === Function) {
-            result.pass =
-              typeof actual === "function" || actual instanceof Function;
-          } else if (expectedConstructor === Object) {
-            result.pass = actual !== null && typeof actual === "object";
-          } else if (expectedConstructor === Boolean) {
-            result.pass = typeof actual === "boolean";
-          } else {
-            result.pass = actual instanceof expectedConstructor;
-          }
-          result.message =
-            "Expected " +
-            Object.prototype.toString.call(actual) +
-            " to be instance of " +
-            expectedConstructor.name +
-            ", but was instance of " +
-            (actual && actual.constructor.name);
-          return result;
-        },
-      };
-    },
-
-    toRender: function (util, customEqualityTesters) {
+    toRender: function (util) {
       return {
         compare: function (actual, expected) {
-          return renderEquals(
-            util,
-            customEqualityTesters,
-            actual,
-            expected,
-            true
-          );
+          return renderEquals(util, actual, expected, true);
         },
       };
     },
 
-    notToRender: function (util, customEqualityTesters) {
+    notToRender: function (util) {
       return {
         compare: function (actual, expected) {
-          return renderEquals(
-            util,
-            customEqualityTesters,
-            actual,
-            expected,
-            false
-          );
+          return renderEquals(util, actual, expected, false);
         },
       };
     },
 
-    toRenderAndCall: function (util, customEqualityTesters) {
+    toRenderAndCall: function (util) {
       return {
         compare: function (actual, expected) {
           const actualRgba = renderAndReadPixels(actual);
@@ -309,7 +337,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toRenderPixelCountAndCall: function (util, customEqualityTesters) {
+    toRenderPixelCountAndCall: function (util) {
       return {
         compare: function (actual, expected) {
           const actualRgba = renderAndReadPixels(actual);
@@ -329,7 +357,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toPickPrimitive: function (util, customEqualityTesters) {
+    toPickPrimitive: function (util) {
       return {
         compare: function (actual, expected, x, y, width, height) {
           return pickPrimitiveEquals(actual, expected, x, y, width, height);
@@ -337,7 +365,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    notToPick: function (util, customEqualityTesters) {
+    notToPick: function (util) {
       return {
         compare: function (actual, x, y, width, height) {
           return pickPrimitiveEquals(actual, undefined, x, y, width, height);
@@ -345,7 +373,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toDrillPickPrimitive: function (util, customEqualityTesters) {
+    toDrillPickPrimitive: function (util) {
       return {
         compare: function (actual, expected, x, y, width, height) {
           return drillPickPrimitiveEquals(actual, 1, x, y, width, height);
@@ -353,7 +381,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    notToDrillPick: function (util, customEqualityTesters) {
+    notToDrillPick: function (util) {
       return {
         compare: function (actual, x, y, width, height) {
           return drillPickPrimitiveEquals(actual, 0, x, y, width, height);
@@ -361,7 +389,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toPickAndCall: function (util, customEqualityTesters) {
+    toPickAndCall: function (util) {
       return {
         compare: function (actual, expected, args) {
           const scene = actual;
@@ -382,7 +410,30 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toDrillPickAndCall: function (util, customEqualityTesters) {
+    toPickVoxelAndCall: function (util) {
+      return {
+        compare: function (actual, expected, args) {
+          const scene = actual;
+          const result = scene.pickVoxel(
+            defaultValue(args, new Cartesian2(0, 0)),
+          );
+
+          const webglStub = !!window.webglStub;
+          if (!webglStub) {
+            // The callback may have expectations that fail, which still makes the
+            // spec fail, as we desired, even though this matcher sets pass to true.
+            const callback = expected;
+            callback(result);
+          }
+
+          return {
+            pass: true,
+          };
+        },
+      };
+    },
+
+    toDrillPickAndCall: function (util) {
       return {
         compare: function (actual, expected, limit) {
           const scene = actual;
@@ -403,7 +454,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toPickFromRayAndCall: function (util, customEqualityTesters) {
+    toPickFromRayAndCall: function (util) {
       return {
         compare: function (actual, expected, ray, objectsToExclude, width) {
           const scene = actual;
@@ -424,7 +475,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toDrillPickFromRayAndCall: function (util, customEqualityTesters) {
+    toDrillPickFromRayAndCall: function (util) {
       return {
         compare: function (
           actual,
@@ -432,14 +483,14 @@ function createDefaultMatchers(debug) {
           ray,
           limit,
           objectsToExclude,
-          width
+          width,
         ) {
           const scene = actual;
           const results = scene.drillPickFromRay(
             ray,
             limit,
             objectsToExclude,
-            width
+            width,
           );
 
           const webglStub = !!window.webglStub;
@@ -457,14 +508,14 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toSampleHeightAndCall: function (util, customEqualityTesters) {
+    toSampleHeightAndCall: function (util) {
       return {
         compare: function (
           actual,
           expected,
           position,
           objectsToExclude,
-          width
+          width,
         ) {
           const scene = actual;
           const results = scene.sampleHeight(position, objectsToExclude, width);
@@ -484,20 +535,20 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toClampToHeightAndCall: function (util, customEqualityTesters) {
+    toClampToHeightAndCall: function (util) {
       return {
         compare: function (
           actual,
           expected,
           cartesian,
           objectsToExclude,
-          width
+          width,
         ) {
           const scene = actual;
           const results = scene.clampToHeight(
             cartesian,
             objectsToExclude,
-            width
+            width,
           );
 
           const webglStub = !!window.webglStub;
@@ -515,7 +566,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toPickPositionAndCall: function (util, customEqualityTesters) {
+    toPickPositionAndCall: function (util) {
       return {
         compare: function (actual, expected, x, y) {
           const scene = actual;
@@ -539,7 +590,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toReadPixels: function (util, customEqualityTesters) {
+    toReadPixels: function (util) {
       return {
         compare: function (actual, expected) {
           let context;
@@ -573,19 +624,9 @@ function createDefaultMatchers(debug) {
             ) {
               pass = false;
               if (epsilon === 0) {
-                message =
-                  "Expected context to render " +
-                  expected +
-                  ", but rendered: " +
-                  rgba;
+                message = `Expected context to render ${expected}, but rendered: ${rgba}`;
               } else {
-                message =
-                  "Expected context to render " +
-                  expected +
-                  " with epsilon = " +
-                  epsilon +
-                  ", but rendered: " +
-                  rgba;
+                message = `Expected context to render ${expected} with epsilon = ${epsilon}, but rendered: ${rgba}`;
               }
             }
           }
@@ -598,7 +639,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    notToReadPixels: function (util, customEqualityTesters) {
+    notToReadPixels: function (util) {
       return {
         compare: function (actual, expected) {
           const context = actual;
@@ -616,11 +657,7 @@ function createDefaultMatchers(debug) {
               rgba[3] === expected[3]
             ) {
               pass = false;
-              message =
-                "Expected context not to render " +
-                expected +
-                ", but rendered: " +
-                rgba;
+              message = `Expected context not to render ${expected}, but rendered: ${rgba}`;
             }
           }
 
@@ -632,7 +669,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    contextToRenderAndCall: function (util, customEqualityTesters) {
+    contextToRenderAndCall: function (util) {
       return {
         compare: function (actual, expected) {
           const actualRgba = contextRenderAndReadPixels(actual).color;
@@ -652,7 +689,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    contextToRender: function (util, customEqualityTesters) {
+    contextToRender: function (util) {
       return {
         compare: function (actual, expected) {
           return expectContextToRender(actual, expected, true);
@@ -660,7 +697,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    notContextToRender: function (util, customEqualityTesters) {
+    notContextToRender: function (util) {
       return {
         compare: function (actual, expected) {
           return expectContextToRender(actual, expected, false);
@@ -668,7 +705,7 @@ function createDefaultMatchers(debug) {
       };
     },
 
-    toBeImageOrImageBitmap: function (util, customEqualityTesters) {
+    toBeImageOrImageBitmap: function (util) {
       return {
         compare: function (actual) {
           if (typeof createImageBitmap !== "function") {
@@ -683,15 +720,22 @@ function createDefaultMatchers(debug) {
         },
       };
     },
+
     toThrowDeveloperError: makeThrowFunction(
       debug,
       DeveloperError,
-      "DeveloperError"
+      "DeveloperError",
     ),
+  };
+}
 
-    toThrowRuntimeError: makeThrowFunction(true, RuntimeError, "RuntimeError"),
-
-    toThrowSyntaxError: makeThrowFunction(true, SyntaxError, "SyntaxError"),
+function createDefaultAsyncMatchers(debug) {
+  return {
+    toBeRejectedWithDeveloperError: makeAsyncThrowFunction(
+      debug,
+      DeveloperError,
+      "DeveloperError",
+    ),
   };
 }
 
@@ -747,13 +791,7 @@ function typedArrayToArray(array) {
   return array;
 }
 
-function renderEquals(
-  util,
-  customEqualityTesters,
-  actual,
-  expected,
-  expectEqual
-) {
+function renderEquals(util, actual, expected, expectEqual) {
   const actualRgba = renderAndReadPixels(actual);
 
   // When the WebGL stub is used, all WebGL function calls are noops so
@@ -766,19 +804,16 @@ function renderEquals(
     };
   }
 
-  const eq = equals(util, customEqualityTesters, actualRgba, expected);
+  const eq = equals(util, actualRgba, expected);
   const pass = expectEqual ? eq : !eq;
 
   let message;
   if (!pass) {
-    message =
-      "Expected " +
-      (expectEqual ? "" : "not ") +
-      "to render [" +
-      typedArrayToArray(expected) +
-      "], but actually rendered [" +
-      typedArrayToArray(actualRgba) +
-      "].";
+    message = `Expected ${
+      expectEqual ? "" : "not "
+    }to render [${typedArrayToArray(
+      expected,
+    )}], but actually rendered [${typedArrayToArray(actualRgba)}].`;
   }
 
   return {
@@ -808,7 +843,7 @@ function pickPrimitiveEquals(actual, expected, x, y, width, height) {
   }
 
   if (!pass) {
-    message = "Expected to pick " + expected + ", but picked: " + result;
+    message = `Expected to pick ${expected}, but picked: ${result}`;
   }
 
   return {
@@ -838,7 +873,7 @@ function drillPickPrimitiveEquals(actual, expected, x, y, width, height) {
   }
 
   if (!pass) {
-    message = "Expected to pick " + expected + ", but picked: " + result;
+    message = `Expected to pick ${expected}, but picked: ${result}`;
   }
 
   return {
@@ -864,26 +899,26 @@ function contextRenderAndReadPixels(options) {
 
   if (!defined(fs) && !defined(sp)) {
     throw new DeveloperError(
-      "options.fragmentShader or options.shaderProgram is required."
+      "options.fragmentShader or options.shaderProgram is required.",
     );
   }
 
   if (defined(fs) && defined(sp)) {
     throw new DeveloperError(
-      "Both options.fragmentShader and options.shaderProgram can not be used at the same time."
+      "Both options.fragmentShader and options.shaderProgram can not be used at the same time.",
     );
   }
 
   if (defined(vs) && defined(sp)) {
     throw new DeveloperError(
-      "Both options.vertexShader and options.shaderProgram can not be used at the same time."
+      "Both options.vertexShader and options.shaderProgram can not be used at the same time.",
     );
   }
 
   if (!defined(sp)) {
     if (!defined(vs)) {
       vs =
-        "attribute vec4 position; void main() { gl_PointSize = 1.0; gl_Position = position; }";
+        "in vec4 position; void main() { gl_PointSize = 1.0; gl_Position = position; }";
     }
     sp = ShaderProgram.fromCache({
       context: context,
@@ -961,11 +996,7 @@ function expectContextToRender(actual, expected, expectEqual) {
       ) {
         return {
           pass: false,
-          message:
-            "After clearing the framebuffer, expected context to render [0, 0, 0, " +
-            expectedAlpha +
-            "], but rendered: " +
-            clearedRgba,
+          message: `After clearing the framebuffer, expected context to render [0, 0, 0, ${expectedAlpha}], but rendered: ${clearedRgba}`,
         };
       }
     }
@@ -983,11 +1014,7 @@ function expectContextToRender(actual, expected, expectEqual) {
       ) {
         return {
           pass: false,
-          message:
-            "Expected context to render " +
-            expected +
-            ", but rendered: " +
-            rgba,
+          message: `Expected context to render ${expected}, but rendered: ${rgba}`,
         };
       }
     } else if (
@@ -998,11 +1025,7 @@ function expectContextToRender(actual, expected, expectEqual) {
     ) {
       return {
         pass: false,
-        message:
-          "Expected context not to render " +
-          expected +
-          ", but rendered: " +
-          rgba,
+        message: `Expected context not to render ${expected}, but rendered: ${rgba}`,
       };
     }
   }
@@ -1015,6 +1038,7 @@ function expectContextToRender(actual, expected, expectEqual) {
 function addDefaultMatchers(debug) {
   return function () {
     this.addMatchers(createDefaultMatchers(debug));
+    this.addAsyncMatchers(createDefaultAsyncMatchers(debug));
   };
 }
 export default addDefaultMatchers;

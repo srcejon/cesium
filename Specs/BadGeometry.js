@@ -1,8 +1,7 @@
-import { queryToObject } from "../Source/Cesium.js";
-import { RuntimeError } from "../Source/Cesium.js";
+import { queryToObject, RuntimeError } from "@cesium/engine";
 
 function BadGeometry() {
-  this._workerName = "../../Specs/TestWorkers/createBadGeometry";
+  this._workerName = "../../Build/Specs/TestWorkers/createBadGeometry";
 
   // Make this worker loadable when testing against the built version of Cesium.
   if (
@@ -12,7 +11,7 @@ function BadGeometry() {
   ) {
     const parameters = queryToObject(window.location.search.substring(1));
     if (parameters.built) {
-      this._workerName = "../" + this._workerName;
+      this._workerName = `../${this._workerName}`;
     }
   }
 }

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -18,10 +18,7 @@
     ></script>
     <script type="module" src="../load-cesium-es6.js"></script>
   </head>
-  <body
-    class="sandcastle-loading"
-    data-sandcastle-bucket="bucket-requirejs.html"
-  >
+  <body class="sandcastle-loading" data-sandcastle-bucket="bucket-requirejs.html">
     <style>
       @import url(../templates/bucket.css);
       #toolbar input[type="range"] {
@@ -37,7 +34,7 @@
     <div id="loadingOverlay"><h1>Loading...</h1></div>
 
     <script id="cesium_sandcastle_script">
-      function startup(Cesium) {
+      window.startup = async function (Cesium) {
         "use strict";
         //Sandcastle_Begin
 
@@ -64,18 +61,18 @@
           const cartesianPosition = Cesium.Cartographic.toCartesian(
             cartographicPosition,
             Cesium.Ellipsoid.WGS84,
-            new Cesium.Cartesian3()
+            new Cesium.Cartesian3(),
           );
           this.modelMatrix = Cesium.Transforms.eastNorthUpToFixedFrame(
             cartesianPosition,
             Cesium.Ellipsoid.WGS84,
-            new Cesium.Matrix4()
+            new Cesium.Matrix4(),
           );
 
           this.halfWidthMeters = 10000;
           this.boundingSphere = new Cesium.BoundingSphere(
             cartesianPosition,
-            this.halfWidthMeters * Math.SQRT2
+            this.halfWidthMeters * Math.SQRT2,
           );
 
           this.time = undefined;
@@ -153,7 +150,7 @@
               bucket32 / width,
               (255 - bucket4) / width,
               1.0,
-              scratchColor
+              scratchColor,
             );
             textureTypedArray[4 * i] = 255 * color.red;
             textureTypedArray[4 * i + 1] = 255 * color.green;
@@ -164,9 +161,7 @@
           return new Cesium.Texture({
             context: context,
             pixelFormat: Cesium.PixelFormat.RGBA,
-            pixelDataType: Cesium.ComponentDatatype.fromTypedArray(
-              textureTypedArray
-            ),
+            pixelDataType: Cesium.ComponentDatatype.fromTypedArray(textureTypedArray),
             source: {
               width: width,
               height: 1,
@@ -183,38 +178,40 @@
         function initialize(primitive, context) {
           // Inteference patterns made by two plane waves crossing each
           // other at an angle. The color is based on the height.
-          const vertexShader =
-            "attribute vec3 a_position;\n" +
-            "varying vec3 v_position;\n" +
-            "uniform float u_time;\n" +
-            "void main()\n" +
-            "{\n" +
-            "    vec2 k = vec2(0.0004, 0.0001);\n" +
-            "    vec2 k2 = vec2(0.0001, 0.0004);\n" +
-            "    float z = 0.0;\n" +
-            "    z += 1000.0 * sin(2.0 * czm_pi * dot(a_position.xy, k) - 0.002 * u_time);\n" +
-            "    z += 1000.0 * sin(2.0 * czm_pi * dot(a_position.xy, k2) - 0.002 * u_time);\n" +
-            "    v_position = a_position;\n" +
-            "    gl_Position = czm_modelViewProjection * vec4(a_position.xy, z, 1.0);\n" +
-            "}\n";
+          const vertexShader = `
+            in vec3 a_position;
+            out vec3 v_position;
+            uniform float u_time;
+            void main()
+            {
+                vec2 k = vec2(0.0004, 0.0001);
+                vec2 k2 = vec2(0.0001, 0.0004);
+                float z = 0.0;
+                z += 1000.0 * sin(2.0 * czm_pi * dot(a_position.xy, k) - 0.002 * u_time);
+                z += 1000.0 * sin(2.0 * czm_pi * dot(a_position.xy, k2) - 0.002 * u_time);
+                v_position = a_position;
+                gl_Position = czm_modelViewProjection * vec4(a_position.xy, z, 1.0);
+            }
+            `;
 
-          const fragmentShader =
-            "varying vec3 v_position;\n" +
-            "uniform float u_time;\n" +
-            "uniform sampler2D u_texture;\n" +
-            "void main()\n" +
-            "{\n" +
-            "    vec2 k = vec2(0.0004, 0.0001);\n" +
-            "    vec2 k2 = vec2(0.0001, 0.0004);\n" +
-            "    float z = 0.0;\n" +
-            "    z += sin(2.0 * czm_pi * dot(v_position.xy, k) - 0.002 * u_time);\n" +
-            "    z += sin(2.0 * czm_pi * dot(v_position.xy, k2) - 0.002 * u_time);\n" +
-            // divide by 2 to keep in the range [-1, 1]
-            "    z *= 0.5;\n" +
-            // signed -> unsigned
-            "    z = 0.5 + 0.5 * z;\n" +
-            "    gl_FragColor = texture2D(u_texture, vec2(z, 0.5));\n" +
-            "}\n";
+          const fragmentShader = `
+            in vec3 v_position;
+            uniform float u_time;
+            uniform sampler2D u_texture;
+            void main()
+            {
+                vec2 k = vec2(0.0004, 0.0001);
+                vec2 k2 = vec2(0.0001, 0.0004);
+                float z = 0.0;
+                z += sin(2.0 * czm_pi * dot(v_position.xy, k) - 0.002 * u_time);
+                z += sin(2.0 * czm_pi * dot(v_position.xy, k2) - 0.002 * u_time);
+                // divide by 2 to keep in the range [-1, 1]
+                z *= 0.5;
+                // signed -> unsigned
+                z = 0.5 + 0.5 * z;
+                out_FragColor = texture(u_texture, vec2(z, 0.5));
+            }
+            `;
 
           const positionLocation = 0;
           const attributeLocations = {
@@ -236,7 +233,7 @@
 
           const positionTypedArray = generateVertices(
             primitive.faceResolution,
-            primitive.halfWidthMeters
+            primitive.halfWidthMeters,
           );
           const positionVertexBuffer = Cesium.Buffer.createVertexBuffer({
             context: context,
@@ -248,20 +245,16 @@
             index: positionLocation,
             vertexBuffer: positionVertexBuffer,
             componentsPerAttribute: 3,
-            componentDatatype: Cesium.ComponentDatatype.fromTypedArray(
-              positionTypedArray
-            ),
+            componentDatatype:
+              Cesium.ComponentDatatype.fromTypedArray(positionTypedArray),
           };
 
-          const indexCount =
-            primitive.faceResolution * primitive.faceResolution * 6;
+          const indexCount = primitive.faceResolution * primitive.faceResolution * 6;
           const indexTypedArray = generateIndices(primitive.faceResolution);
           const indexBuffer = Cesium.Buffer.createIndexBuffer({
             context: context,
             typedArray: indexTypedArray,
-            indexDatatype: Cesium.ComponentDatatype.fromTypedArray(
-              indexTypedArray
-            ),
+            indexDatatype: Cesium.ComponentDatatype.fromTypedArray(indexTypedArray),
             usage: Cesium.BufferUsage.STATIC_DRAW,
           });
 
@@ -313,20 +306,21 @@
         };
 
         const position = new Cesium.Cartographic(0, 0, 1000.0);
-        const primitive = viewer.scene.primitives.add(
-          new CustomPrimitive(position)
-        );
+        const primitive = viewer.scene.primitives.add(new CustomPrimitive(position));
         viewer.camera.flyTo({
           destination: Cesium.Cartesian3.fromDegrees(0, 0, 50000),
           duration: 0.1,
         });
 
         //Sandcastle_End
-        Sandcastle.finishedLoading();
-      }
+      };
       if (typeof Cesium !== "undefined") {
         window.startupCalled = true;
-        startup(Cesium);
+        window.startup(Cesium).catch((error) => {
+          "use strict";
+          console.error(error);
+        });
+        Sandcastle.finishedLoading();
       }
     </script>
   </body>

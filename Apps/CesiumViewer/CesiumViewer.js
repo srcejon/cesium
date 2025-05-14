@@ -1,8 +1,10 @@
-window.CESIUM_BASE_URL = "../../Source/";
+// eslint-disable-next-line no-undef
+window.CESIUM_BASE_URL = window.CESIUM_BASE_URL
+  ? window.CESIUM_BASE_URL
+  : "../../Build/CesiumUnminified/";
 
 import {
   Cartesian3,
-  createWorldTerrain,
   defined,
   formatError,
   Math as CesiumMath,
@@ -10,14 +12,17 @@ import {
   queryToObject,
   CzmlDataSource,
   GeoJsonDataSource,
+  ImageryLayer,
   KmlDataSource,
+  GpxDataSource,
+  Terrain,
   TileMapServiceImageryProvider,
   Viewer,
   viewerCesiumInspectorMixin,
   viewerDragDropMixin,
-} from "../../Source/Cesium.js";
+} from "../../Build/CesiumUnminified/index.js";
 
-function main() {
+async function main() {
   /*
      Options parsed from query string:
        source=url          The URL of a CZML/GeoJSON/KML data source to load at startup.
@@ -39,32 +44,34 @@ function main() {
      */
   const endUserOptions = queryToObject(window.location.search.substring(1));
 
-  let imageryProvider;
+  let baseLayer;
   if (defined(endUserOptions.tmsImageryUrl)) {
-    imageryProvider = new TileMapServiceImageryProvider({
-      url: endUserOptions.tmsImageryUrl,
-    });
+    baseLayer = ImageryLayer.fromProviderAsync(
+      TileMapServiceImageryProvider.fromUrl(endUserOptions.tmsImageryUrl),
+    );
   }
 
   const loadingIndicator = document.getElementById("loadingIndicator");
+  const hasBaseLayerPicker = !defined(baseLayer);
+
+  const terrain = Terrain.fromWorldTerrain({
+    requestWaterMask: true,
+    requestVertexNormals: true,
+  });
+
   let viewer;
   try {
-    const hasBaseLayerPicker = !defined(imageryProvider);
     viewer = new Viewer("cesiumContainer", {
-      imageryProvider: imageryProvider,
+      baseLayer: baseLayer,
       baseLayerPicker: hasBaseLayerPicker,
       scene3DOnly: endUserOptions.scene3DOnly,
       requestRenderMode: true,
+      terrain: terrain,
     });
 
     if (hasBaseLayerPicker) {
       const viewModel = viewer.baseLayerPicker.viewModel;
       viewModel.selectedTerrain = viewModel.terrainProviderViewModels[1];
-    } else {
-      viewer.terrainProvider = createWorldTerrain({
-        requestWaterMask: true,
-        requestVertexNormals: true,
-      });
     }
   } catch (exception) {
     loadingIndicator.style.display = "none";
@@ -83,7 +90,7 @@ function main() {
   }
 
   const showLoadError = function (name, error) {
-    const title = "An error occurred while loading the file: " + name;
+    const title = `An error occurred while loading the file: ${name}`;
     const message =
       "An error occurred while loading the file, which may indicate that it is invalid.  A detailed error report is below:";
     viewer.cesiumWidget.showErrorPanel(title, message, error);
@@ -118,6 +125,8 @@ function main() {
         sourceType = "geojson";
       } else if (/\.kml$/i.test(source) || /\.kmz$/i.test(source)) {
         sourceType = "kml";
+      } else if (/\.gpx$/i.test(source)) {
+        sourceType = "gpx";
       }
     }
 
@@ -132,33 +141,30 @@ function main() {
         canvas: scene.canvas,
         screenOverlayContainer: viewer.container,
       });
+    } else if (sourceType === "gpx") {
+      loadPromise = GpxDataSource.load(source);
     } else {
       showLoadError(source, "Unknown format.");
     }
 
     if (defined(loadPromise)) {
-      viewer.dataSources
-        .add(loadPromise)
-        .then(function (dataSource) {
-          const lookAt = endUserOptions.lookAt;
-          if (defined(lookAt)) {
-            const entity = dataSource.entities.getById(lookAt);
-            if (defined(entity)) {
-              viewer.trackedEntity = entity;
-            } else {
-              const error =
-                'No entity with id "' +
-                lookAt +
-                '" exists in the provided data source.';
-              showLoadError(source, error);
-            }
-          } else if (!defined(view) && endUserOptions.flyTo !== "false") {
-            viewer.flyTo(dataSource);
+      try {
+        const dataSource = await viewer.dataSources.add(loadPromise);
+        const lookAt = endUserOptions.lookAt;
+        if (defined(lookAt)) {
+          const entity = dataSource.entities.getById(lookAt);
+          if (defined(entity)) {
+            viewer.trackedEntity = entity;
+          } else {
+            const error = `No entity with id "${lookAt}" exists in the provided data source.`;
+            showLoadError(source, error);
           }
-        })
-        .otherwise(function (error) {
-          showLoadError(source, error);
-        });
+        } else if (!defined(view) && endUserOptions.flyTo !== "false") {
+          viewer.flyTo(dataSource);
+        }
+      } catch (error) {
+        showLoadError(source, error);
+      }
     }
   }
 
@@ -172,7 +178,7 @@ function main() {
       document.body.classList.add("cesium-lighter");
       viewer.animation.applyThemeChanges();
     } else {
-      const error = "Unknown theme: " + theme;
+      const error = `Unknown theme: ${theme}`;
       viewer.cesiumWidget.showErrorPanel(error, "");
     }
   }
@@ -215,22 +221,14 @@ function main() {
     const position = camera.positionCartographic;
     let hpr = "";
     if (defined(camera.heading)) {
-      hpr =
-        "," +
-        CesiumMath.toDegrees(camera.heading) +
-        "," +
-        CesiumMath.toDegrees(camera.pitch) +
-        "," +
-        CesiumMath.toDegrees(camera.roll);
+      hpr = `,${CesiumMath.toDegrees(camera.heading)},${CesiumMath.toDegrees(
+        camera.pitch,
+      )},${CesiumMath.toDegrees(camera.roll)}`;
     }
-    endUserOptions.view =
-      CesiumMath.toDegrees(position.longitude) +
-      "," +
-      CesiumMath.toDegrees(position.latitude) +
-      "," +
-      position.height +
-      hpr;
-    history.replaceState(undefined, "", "?" + objectToQuery(endUserOptions));
+    endUserOptions.view = `${CesiumMath.toDegrees(
+      position.longitude,
+    )},${CesiumMath.toDegrees(position.latitude)},${position.height}${hpr}`;
+    history.replaceState(undefined, "", `?${objectToQuery(endUserOptions)}`);
   }
 
   let timeout;

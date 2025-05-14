@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="utf-8" />
@@ -18,10 +18,7 @@
     ></script>
     <script type="module" src="../load-cesium-es6.js"></script>
   </head>
-  <body
-    class="sandcastle-loading"
-    data-sandcastle-bucket="bucket-requirejs.html"
-  >
+  <body class="sandcastle-loading" data-sandcastle-bucket="bucket-requirejs.html">
     <style>
       @import url(../templates/bucket.css);
     </style>
@@ -32,7 +29,7 @@
     </div>
 
     <script id="cesium_sandcastle_script">
-      function startup(Cesium) {
+      window.startup = async function (Cesium) {
         "use strict";
         //Sandcastle_Begin
         const czml = [
@@ -91,18 +88,7 @@
             polygon: {
               positions: {
                 cartographicDegrees: [
-                  -109.03,
-                  41,
-                  0,
-                  -102.03,
-                  41,
-                  0,
-                  -102.03,
-                  37,
-                  0,
-                  -109.03,
-                  37,
-                  0,
+                  -109.03, 41, 0, -102.03, 41, 0, -102.03, 37, 0, -109.03, 37, 0,
                 ],
               },
               material: {
@@ -123,6 +109,7 @@
         });
 
         const dataSource = new Cesium.CzmlDataSource();
+        const loadedPromise = dataSource.load(czml);
 
         function scaleProperty(property, scalingFactor) {
           // returns a property that scales another property by a constant factor.
@@ -134,18 +121,20 @@
         }
 
         function setExtrudedHeight(propertyName) {
-          const customPropertyObject = dataSource.entities.getById(
-            "custom_property_object"
-          );
-          const property = customPropertyObject.properties[propertyName];
-          const colorado = dataSource.entities.getById("colorado");
+          loadedPromise.then(function () {
+            const customPropertyObject = dataSource.entities.getById(
+              "custom_property_object",
+            );
+            const property = customPropertyObject.properties[propertyName];
+            const colorado = dataSource.entities.getById("colorado");
 
-          // Because the population values are so large, we scale them down
-          // by 50 so they fit on the screen.
-          // If we didn't need to scale, we could directly assign the property
-          // to extrudedHeight.
-          // colorado.polygon.extrudedHeight = scaleProperty(property, 1 / 50.0);
-          colorado.polygon.extrudedHeight = scaleProperty(property, 1 / 50.0);
+            // Because the population values are so large, we scale them down
+            // by 50 so they fit on the screen.
+            // If we didn't need to scale, we could directly assign the property
+            // to extrudedHeight.
+            // colorado.polygon.extrudedHeight = scaleProperty(property, 1 / 50.0);
+            colorado.polygon.extrudedHeight = scaleProperty(property, 1 / 50.0);
+          });
         }
 
         // Custom properties can be used as the value of graphical properties:
@@ -164,17 +153,19 @@
               },
             },
           ],
-          "propertiesMenu"
+          "propertiesMenu",
         );
 
-        dataSource.load(czml);
         viewer.dataSources.add(dataSource);
         viewer.zoomTo(dataSource); //Sandcastle_End
-        Sandcastle.finishedLoading();
-      }
+      };
       if (typeof Cesium !== "undefined") {
         window.startupCalled = true;
-        startup(Cesium);
+        window.startup(Cesium).catch((error) => {
+          "use strict";
+          console.error(error);
+        });
+        Sandcastle.finishedLoading();
       }
     </script>
   </body>
