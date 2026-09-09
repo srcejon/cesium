@@ -4667,7 +4667,7 @@ Scene.prototype.render = function (time) {
 
     const frameNumber = CesiumMath.incrementWrap(
       frameState.frameNumber,
-      15000000.0,
+      FrameState.maximumFrameNumber,
       1.0,
     );
     updateFrameNumber(this, frameNumber, time);

@@ -6,10 +6,12 @@
 
 #### Additions :tada:
 
+- Added `externalTilesetIdleFrames` to `Cesium3DTileset`, as a constructor option and a property: how many frames an external tileset brought into the tile tree must have gone unused before those tiles are released. [#3453](https://github.com/CesiumGS/cesium/issues/3453)
 - Added `vectorBlendOption` to `Cesium3DTileset`, for selecting opaque or translucent modes. `blendOption` can now also be changed after construction on `BufferPointCollection`, `BufferPolylineCollection`, and `BufferPolygonCollection`. [#13764](https://github.com/CesiumGS/cesium/issues/13764)
 
 #### Fixes :wrench:
 
+- Fixed tiles brought into the tree never being released. This is the retention half of [#3453](https://github.com/CesiumGS/cesium/issues/3453).
 - Fixed a GPU memory leak where the edge vertex array created for `EXT_mesh_primitive_edge_visibility` rendering was never destroyed when draw commands were rebuilt or the model was destroyed. [#13721](https://github.com/CesiumGS/cesium/pull/13721)
 - Changed the typing of `PrimitiveCollection.add` to return the added primitive as the same type instead of `any`. [#13742](https://github.com/CesiumGS/cesium/issues/13742)
 

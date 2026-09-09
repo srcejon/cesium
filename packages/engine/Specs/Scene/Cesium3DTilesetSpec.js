@@ -2569,6 +2569,172 @@ describe(
       expect(root.children[3].isDestroyed()).toEqual(true);
     });
 
+    // An external tileset's content is the tiles it adds to the tree.
+    // https://github.com/CesiumGS/cesium/issues/3453
+    //
+    // In this fixture the entry tileset's own root is the tile whose content is
+    // tileset2.json, and a tile within that one brings in tileset3.json, so both
+    // shapes are covered: a tile at the root of the tileset, and one below it.
+    async function loadAndReleaseExternalTileset() {
+      const tileset = await Cesium3DTilesTester.loadTileset(
+        scene,
+        tilesetOfTilesetsUrl,
+      );
+      // Idle from the frame after they were last looked at, so that a handful of
+      // frames is enough here
+      tileset.externalTilesetIdleFrames = 1;
+      viewAllTiles();
+      await Cesium3DTilesTester.waitForTilesLoaded(scene, tileset);
+
+      const root = tileset.root;
+      expect(root.hasTilesetContent).toBe(true);
+      expect(tileset._externalTilesetTiles).toContain(root);
+      expect(
+        tileset._externalTilesetTiles.filter((tile) => defined(tile.parent))
+          .length,
+      ).toBeGreaterThan(0);
+
+      const totalWhenLoaded = tileset.statistics.numberOfTilesTotal;
+      expect(totalWhenLoaded).toBeGreaterThan(1);
+
+      viewNothing();
+      tileset.trimLoadedTiles();
+      scene.renderForSpecs(); // Unloads the content the tiles were drawing
+      for (let i = 0; i < 12; ++i) {
+        scene.renderForSpecs(); // Idle long enough, and time for the sweep
+      }
+
+      return { tileset, root, totalWhenLoaded };
+    }
+
+    it("releases the tiles of an external tileset that is no longer in use", async function () {
+      const { tileset, root, totalWhenLoaded } =
+        await loadAndReleaseExternalTileset();
+
+      expect(tileset.statistics.numberOfTilesTotal).toBeLessThan(
+        totalWhenLoaded,
+      );
+
+      // The tile itself stays, so the tileset still has a root to traverse, but
+      // everything the external tileset put below it has gone
+      expect(root.isDestroyed()).toBe(false);
+      expect(root.children.length).toBe(0);
+      expect(root.hasTilesetContent).toBe(false);
+      expect(root.contentUnloaded).toBe(true);
+    });
+
+    it("loads an external tileset again after its tiles are released", async function () {
+      const { tileset, root, totalWhenLoaded } =
+        await loadAndReleaseExternalTileset();
+      expect(root.children.length).toBe(0);
+
+      viewAllTiles();
+      await Cesium3DTilesTester.waitForTilesLoaded(scene, tileset);
+
+      expect(root.hasTilesetContent).toBe(true);
+      expect(root.children.length).toBeGreaterThan(0);
+      expect(tileset.statistics.numberOfTilesTotal).toBe(totalWhenLoaded);
+    });
+
+    it("keeps the tiles of an external tileset that is in use", async function () {
+      const tileset = await Cesium3DTilesTester.loadTileset(
+        scene,
+        tilesetOfTilesetsUrl,
+      );
+      tileset.externalTilesetIdleFrames = 1;
+      viewAllTiles();
+      await Cesium3DTilesTester.waitForTilesLoaded(scene, tileset);
+
+      const nested = tileset._externalTilesetTiles.filter((tile) =>
+        defined(tile.parent),
+      );
+      expect(nested.length).toBeGreaterThan(0);
+      const totalWhenLoaded = tileset.statistics.numberOfTilesTotal;
+
+      // Still being looked at, so nothing is released however long it goes on
+      for (let i = 0; i < 12; ++i) {
+        scene.renderForSpecs();
+      }
+
+      expect(tileset.statistics.numberOfTilesTotal).toBe(totalWhenLoaded);
+      expect(nested[0].children.length).toBeGreaterThan(0);
+      expect(nested[0].hasTilesetContent).toBe(true);
+    });
+
+    it("releases an external tileset stamped before the frame number wrapped", async function () {
+      const tileset = await Cesium3DTilesTester.loadTileset(
+        scene,
+        tilesetOfTilesetsUrl,
+      );
+      tileset.externalTilesetIdleFrames = 1;
+      viewAllTiles();
+      await Cesium3DTilesTester.waitForTilesLoaded(scene, tileset);
+
+      const root = tileset.root;
+      const totalWhenLoaded = tileset.statistics.numberOfTilesTotal;
+
+      viewNothing();
+      tileset.trimLoadedTiles();
+
+      // Stamped before the first render, or the sweep releases the subtree on that
+      // frame and there is nothing left to hold.
+      // The scene wraps its frame number back to 1 after 15,000,000 frames, so a
+      // stamp from before the wrap is a larger number than the frame number now.
+      // Subtracting one from the other gives a negative age, which reads as freshly
+      // used and would hold the subtree for most of another cycle
+      const preWrap = 14999999;
+      const stack = [root];
+      while (stack.length > 0) {
+        const tile = stack.pop();
+        tile._visitedFrame = preWrap;
+        tile._touchedFrame = preWrap;
+        tile._selectedFrame = preWrap;
+        tile._requestedFrame = preWrap;
+        for (let i = 0; i < tile.children.length; ++i) {
+          stack.push(tile.children[i]);
+        }
+      }
+
+      for (let i = 0; i < 12; ++i) {
+        scene.renderForSpecs();
+      }
+
+      expect(root.children.length).toBe(0);
+      expect(tileset.statistics.numberOfTilesTotal).toBeLessThan(
+        totalWhenLoaded,
+      );
+    });
+
+    it("keeps an external tileset whose content is still arriving", async function () {
+      const tileset = await Cesium3DTilesTester.loadTileset(
+        scene,
+        tilesetOfTilesetsUrl,
+      );
+      tileset.externalTilesetIdleFrames = 1;
+      viewAllTiles();
+      await Cesium3DTilesTester.waitForTilesLoaded(scene, tileset);
+
+      const root = tileset.root;
+
+      viewNothing();
+      tileset.trimLoadedTiles();
+
+      // A tile with multiple contents says it has tileset content as soon as one
+      // inner content is an external tileset, while the others are still being
+      // built, so a request in flight has to hold the subtree on its own. Set
+      // before the first render, or the sweep releases it on that frame
+      root._contentState = Cesium3DTileContentState.LOADING;
+      for (let i = 0; i < 12; ++i) {
+        scene.renderForSpecs();
+      }
+
+      // Its own subtree is held. What the deeper external tileset below it brought
+      // in is idle, and is released as usual
+      expect(root.isDestroyed()).toBe(false);
+      expect(root.children.length).toBeGreaterThan(0);
+      expect(root.hasTilesetContent).toBe(true);
+    });
+
     it("destroys before external tileset JSON file finishes loading", async function () {
       viewNothing();
       const tileset = await Cesium3DTilesTester.loadTileset(
@@ -3677,6 +3843,22 @@ describe(
       expect(function () {
         tileset.maximumCacheOverflowBytes = -1;
       }).toThrowDeveloperError();
+    });
+
+    it("externalTilesetIdleFrames throws when negative", async function () {
+      const tileset = await Cesium3DTileset.fromUrl(tilesetUrl, options);
+      expect(function () {
+        tileset.externalTilesetIdleFrames = -1;
+      }).toThrowDeveloperError();
+    });
+
+    it("externalTilesetIdleFrames throws when the construction option is negative", async function () {
+      await expectAsync(
+        Cesium3DTileset.fromUrl(tilesetUrl, {
+          ...options,
+          externalTilesetIdleFrames: -1,
+        }),
+      ).toBeRejectedWithDeveloperError();
     });
 
     it("maximumScreenSpaceError throws when negative", async function () {

@@ -1476,6 +1476,34 @@ Cesium3DTile.prototype.cancelRequests = function () {
 };
 
 /**
+ * Unloads an external tileset's content: the tile goes back to the state it was in
+ * before it was loaded, so that the traversal requests it again when it is
+ * needed. The tiles it brought into the tree are destroyed separately, by
+ * <code>Cesium3DTileset</code>.
+ *
+ * @private
+ */
+Cesium3DTile.prototype.unloadTilesetContent = function () {
+  if (!this.hasTilesetContent) {
+    return;
+  }
+
+  this._content = this._content && this._content.destroy();
+  this._contentState = Cesium3DTileContentState.UNLOADED;
+  this._expiredContent = undefined;
+  this.expireDate = undefined;
+
+  // What the tile looked like before its content told us it was a tileset. Without
+  // this the traversal would never ask for it again: it only requests tiles whose
+  // content is renderable and unloaded
+  this.hasTilesetContent = false;
+  this.hasRenderableContent = true;
+
+  this._selectedFrame = 0;
+  this.lastStyleTime = 0.0;
+};
+
+/**
  * Unloads the tile's content.
  *
  * @private

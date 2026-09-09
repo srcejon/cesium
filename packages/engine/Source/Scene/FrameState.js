@@ -498,4 +498,17 @@ function FrameState(context, creditDisplay, jobScheduler) {
  * @callback FrameState.AfterRenderCallback
  * @returns {boolean} true if another render should be requested in request render mode
  */
+
+/**
+ * The largest value {@link FrameState#frameNumber} takes before wrapping back to 1, so
+ * that frame numbers stay exact and comparable. Frame numbers run from 1 to this value,
+ * which makes this the length of the cycle as well as its maximum: anything comparing a
+ * stored frame number against the current one has to allow for the wrap, or a stamp from
+ * before it reads as being in the future.
+ *
+ * @type {number}
+ * @constant
+ */
+FrameState.maximumFrameNumber = 15000000;
+
 export default FrameState;

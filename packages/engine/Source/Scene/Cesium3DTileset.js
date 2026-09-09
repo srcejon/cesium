@@ -45,6 +45,7 @@ import Cesium3DTileStyleEngine from "./Cesium3DTileStyleEngine.js";
 import ClippingPlaneCollection from "./ClippingPlaneCollection.js";
 import ClippingPolygonCollection from "./ClippingPolygonCollection.js";
 import EdgeDisplayMode from "./EdgeDisplayMode.js";
+import FrameState from "./FrameState.js";
 import hasExtension from "./hasExtension.js";
 import { isHeightReferenceClamp } from "./HeightReference.js";
 import ImplicitTileset from "./ImplicitTileset.js";
@@ -81,6 +82,7 @@ import ImageryLayerCollection from "./ImageryLayerCollection.js";
  * @property {number} [maximumScreenSpaceError=16] The maximum screen space error used to drive level of detail refinement.
  * @property {number} [cacheBytes=536870912] The size (in bytes) to which the tile cache will be trimmed, if the cache contains tiles not needed for the current view.
  * @property {number} [maximumCacheOverflowBytes=536870912] The maximum additional memory (in bytes) to allow for cache headroom, if more than {@link Cesium3DTileset#cacheBytes} are needed for the current view.
+ * @property {number} [externalTilesetIdleFrames=120] How many frames an external tileset brought into the tile tree must have gone unused before those tiles are released.
  * @property {boolean} [cullWithChildrenBounds=true] Optimization option. Whether to cull tiles using the union of their children bounding volumes.
  * @property {boolean} [cullRequestsWhileMoving=true] Optimization option. Don't request tiles that will likely be unused when they come back because of the camera's movement. This optimization only applies to stationary tilesets.
  * @property {number} [cullRequestsWhileMovingMultiplier=60.0] Optimization option. Multiplier used in culling requests while moving. Larger is more aggressive culling, smaller less aggressive culling.
@@ -223,6 +225,20 @@ function Cesium3DTileset(options) {
   this._modelUpAxis = undefined;
   this._modelForwardAxis = undefined;
   this._cache = new Cesium3DTilesetCache();
+  // Tiles whose content is an external tileset - see unloadExternalTilesets
+  this._externalTilesetTiles = [];
+  this._externalTilesetSweepIndex = 0;
+  // How many of them are examined per frame, and how many frames everything in one
+  // has to have gone unused before its tiles are released
+  this._externalTilesetSweepCount = 8;
+  this._externalTilesetIdleFrames = options.externalTilesetIdleFrames ?? 120;
+  //>>includeStart('debug', pragmas.debug);
+  Check.typeOf.number.greaterThanOrEquals(
+    "externalTilesetIdleFrames",
+    this._externalTilesetIdleFrames,
+    0,
+  );
+  //>>includeEnd('debug');
   this._processingQueue = [];
   this._selectedTiles = [];
   this._emptyTiles = [];
@@ -1652,6 +1668,37 @@ Object.defineProperties(Cesium3DTileset.prototype, {
   },
 
   /**
+   * How many frames an external tileset brought into the tile tree must
+   * have gone unused before those tiles are released.
+   * <p>
+   * Unloading a tile's content frees what it draws; this frees the tiles themselves.
+   * </p>
+   * <p>
+   * A lower value holds fewer tiles and asks for more of them again, so it trades
+   * memory for requests.
+   * </p>
+   *
+   * @memberof Cesium3DTileset.prototype
+   *
+   * @type {number}
+   * @default 120
+   *
+   * @exception {DeveloperError} <code>externalTilesetIdleFrames</code> must be typeof 'number' and greater than or equal to 0
+   */
+  externalTilesetIdleFrames: {
+    get: function () {
+      return this._externalTilesetIdleFrames;
+    },
+    set: function (value) {
+      //>>includeStart('debug', pragmas.debug);
+      Check.typeOf.number.greaterThanOrEquals("value", value, 0);
+      //>>includeEnd('debug');
+
+      this._externalTilesetIdleFrames = value;
+    },
+  },
+
+  /**
    * If loading the level of detail required by @{link Cesium3DTileset#maximumScreenSpaceError}
    * results in the memory usage exceeding @{link Cesium3DTileset#cacheBytes}
    * plus @{link Cesium3DTileset#maximumCacheOverflowBytes}, level of detail refinement
@@ -2399,6 +2446,13 @@ Cesium3DTileset.prototype.loadTileset = function (
 
   const statistics = this._statistics;
 
+  if (defined(parentTile)) {
+    // This tile's content is an external tileset, and the tiles below are about to
+    // be attached to it. Remembered so its subtree can be released again when
+    // nothing in it is being used - see unloadExternalTilesets
+    this._externalTilesetTiles.push(parentTile);
+  }
+
   const tilesetVersion = asset.tilesetVersion;
   if (defined(tilesetVersion)) {
     // Append the tileset version to the resource
@@ -2726,6 +2780,7 @@ Cesium3DTileset.prototype.postPassesUpdate = function (frameState) {
   cancelOutOfViewRequests(this, frameState);
   raiseLoadProgressEvent(this, frameState);
   this._cache.unloadTiles(this, unloadTile);
+  unloadExternalTilesets(this, frameState);
 
   // If the style wasn't able to be applied this frame (for example,
   // the tileset was hidden), keep it dirty so the engine can try
@@ -3332,6 +3387,7 @@ function updateTiles(tileset, frameState, passOptions) {
 }
 
 const scratchStack = [];
+const scratchStack2 = []; // See subtreeInUse - never in use at the same time as scratchStack
 
 /**
  * @private
@@ -3366,6 +3422,155 @@ function unloadTile(tileset, tile) {
   tileset._statistics.decrementLoadCounts(tile.content);
   --tileset._statistics.numberOfTilesWithContentReady;
   tile.unloadContent();
+}
+
+/**
+ * How many frames ago something stamped with the given frame number happened.
+ *
+ * The scene wraps its frame number back to 1 every
+ * {@link FrameState.maximumFrameNumber} frames, about three days at 60 fps, after which
+ * a stamp from before the wrap is the larger number and would otherwise read as being in
+ * the future.
+ *
+ * @private
+ * @param {number} frameNumber The frame number now.
+ * @param {number} frame The frame number to measure back from.
+ * @returns {number} The number of frames since, never negative.
+ */
+function framesSince(frameNumber, frame) {
+  const age = frameNumber - frame;
+  return age < 0 ? age + FrameState.maximumFrameNumber : age;
+}
+
+// A bound on the entries dropped from the list in one frame, so that clearing up
+// after a large release is spread out too. How many tilesets are examined per frame,
+// and how long they must have gone unused, are per tileset - see the constructor
+const externalTilesetSweepSteps = 64;
+
+/**
+ * Is anything in this subtree loaded, being loaded, or recently drawn? The tiles an
+ * external tileset brought into the tree can only be released when nothing is.
+ *
+ * Content that is itself an external tileset does not count: it is the skeleton
+ * being released here, not anything drawn. Nor does empty content, which every tile
+ * without a content URI has from the moment it is created.
+ *
+ * @private
+ * @param {Cesium3DTile} root
+ * @param {number} frameNumber
+ * @param {number} idleFrames
+ * @returns {boolean}
+ */
+function subtreeInUse(root, frameNumber, idleFrames) {
+  const stack = scratchStack2;
+  stack.length = 0;
+  stack.push(root);
+  while (stack.length > 0) {
+    const tile = stack.pop();
+
+    // A request that has not finished, whatever it turns out to hold. This has to
+    // come before the content type is considered: a tile with multiple contents sets
+    // hasTilesetContent as soon as one inner content is found to be an external
+    // tileset, while its glTF siblings are still being built, and tearing the tile
+    // down underneath those promises destroys content they are about to use
+    const state = tile._contentState;
+    if (
+      state === Cesium3DTileContentState.LOADING ||
+      state === Cesium3DTileContentState.PROCESSING
+    ) {
+      stack.length = 0;
+      return true;
+    }
+
+    // Anything from the moment it is asked for to the moment it is unloaded again.
+    // A tile that failed holds nothing, and will not be asked for again
+    const holdsContent =
+      !tile.hasEmptyContent &&
+      !tile.hasTilesetContent &&
+      state !== Cesium3DTileContentState.UNLOADED &&
+      state !== Cesium3DTileContentState.FAILED;
+    if (holdsContent || defined(tile.cacheNode)) {
+      stack.length = 0;
+      return true;
+    }
+
+    // A tile the traversal has looked at, drawn or asked for lately may still be
+    // held in one of the lists it builds each frame. Ages are compared rather than
+    // the frame numbers themselves, because once the scene's frame number has
+    // wrapped the largest stamp is not the most recent one
+    const age = Math.min(
+      framesSince(frameNumber, tile._visitedFrame),
+      framesSince(frameNumber, tile._touchedFrame),
+      framesSince(frameNumber, tile._selectedFrame),
+      framesSince(frameNumber, tile._requestedFrame),
+    );
+    if (age < idleFrames) {
+      stack.length = 0;
+      return true;
+    }
+
+    const children = tile.children;
+    for (let i = 0; i < children.length; ++i) {
+      stack.push(children[i]);
+    }
+  }
+  return false;
+}
+
+/**
+ * Releases the tiles that external tilesets have brought into the tree, where
+ * nothing in them is in use.
+ *
+ * A few are examined each frame, so the cost is spread out. See
+ * https://github.com/CesiumGS/cesium/issues/3453
+ *
+ * @private
+ * @param {Cesium3DTileset} tileset
+ * @param {FrameState} frameState
+ */
+function unloadExternalTilesets(tileset, frameState) {
+  const tiles = tileset._externalTilesetTiles;
+  const frameNumber = frameState.frameNumber;
+  const idleFrames = tileset._externalTilesetIdleFrames;
+  const sweepCount = tileset._externalTilesetSweepCount;
+  let examined = 0;
+  let steps = 0;
+
+  while (
+    examined < sweepCount &&
+    steps < externalTilesetSweepSteps &&
+    tiles.length > 0
+  ) {
+    ++steps;
+    if (tileset._externalTilesetSweepIndex >= tiles.length) {
+      tileset._externalTilesetSweepIndex = 0;
+    }
+    const index = tileset._externalTilesetSweepIndex;
+    const tile = tiles[index];
+
+    // Gone already: destroyed with a subtree released before it, or released here
+    // and not yet loaded again
+    if (
+      tile.isDestroyed() ||
+      !tile.hasTilesetContent ||
+      tile.children.length === 0
+    ) {
+      tiles.splice(index, 1);
+      continue;
+    }
+
+    ++tileset._externalTilesetSweepIndex;
+    ++examined;
+
+    if (subtreeInUse(tile, frameNumber, idleFrames)) {
+      continue;
+    }
+
+    destroySubtree(tileset, tile);
+    tile.unloadTilesetContent();
+    tiles.splice(index, 1);
+    tileset._externalTilesetSweepIndex = index;
+  }
 }
 
 /**
