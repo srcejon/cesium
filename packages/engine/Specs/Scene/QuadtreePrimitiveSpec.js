@@ -862,6 +862,27 @@ describe("Scene/QuadtreePrimitive", function () {
         });
       });
 
+      it("does not queue a removal for a callback the tiles never saw", function () {
+        // Both lists are only drained while the quadtree is rendering. A hidden globe
+        // never renders, and anything clamped re-registers as it moves, so a removal
+        // queued for a callback the tiles were never told about would pile up without
+        // limit, each entry holding a Cartographic
+        const quadtree = new QuadtreePrimitive({
+          tileProvider: createSpyTileProvider(),
+        });
+
+        const removeFunc = quadtree.updateHeight(
+          Cartographic.fromDegrees(-72.0, 40.0),
+          function (position) {},
+        );
+        expect(quadtree._addHeightCallbacks.length).toBe(1);
+
+        removeFunc();
+
+        expect(quadtree._addHeightCallbacks.length).toBe(0);
+        expect(quadtree._removeHeightCallbacks.length).toBe(0);
+      });
+
       it("add and remove callbacks to tiles", function () {
         const tileProvider = createSpyTileProvider();
         tileProvider.getReady.and.returnValue(true);
